@@ -1,6 +1,6 @@
 # NativeVideo for LOVE
 
-Play MP4 (and whatever else the OS can decode) in LOVE 11.x using the operating system's own video decoders. No FFmpeg to bundle, no codec licences.
+Play MP4 (and whatever else the OS can decode) in LOVE 11.x or LOVE 12.0 using the operating system's own video decoders. No FFmpeg to bundle, no codec licences.
 
 | OS | API | Typical formats |
 |---|---|---|
