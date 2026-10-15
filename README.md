@@ -115,6 +115,8 @@ Run this command from the project folder.
 
 ## Credits
 
-Thanks to **ffunatsu** and their `love2d_gv_video_player`. 
-Microsoft documentation.
-GhostOne teaching me 
+- Thanks to **ffunatsu** and their `love2d_gv_video_player`.
+- GhostOne teaching me
+- Reeko teaching me cpp 
+- Microsoft documentation.
+
