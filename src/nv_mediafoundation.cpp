@@ -1,12 +1,8 @@
 // Windows backend: Media Foundation Source Reader.
 //
-// The Source Reader opens the file and picks the system decoder (H.264, VP9,
-// HEVC/AV1 when their Store extensions are installed...). We ask for frames in
-// this order and use the first one that works:
-//   1. RGB32 via the advanced video processor (Windows 8+)
-//   2. RGB32 via the basic video processor
-//   3. NV12 straight from the decoder, converted to RGBA by us
-// RGB32 (really BGRX) is swizzled to RGBA while copying.
+// The Source Reader picks whatever decoder Windows has for the file
+// RGB32 is really BGRX, so we swap Blue/Red and force alpha while copying.
+
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <mfapi.h>

@@ -14,9 +14,6 @@ void nv_set_error(const char* fmt, ...)
 }
 
 const char* nv_last_error(void) { return g_error; }
-
-/* Copy a 4-byte-per-pixel image into tightly packed RGBA, optionally swapping
- * B and R and forcing alpha to 255 (BGRX sources have garbage in the X byte). */
 void nv_copy_rows(uint8_t* dst, const uint8_t* src, long src_pitch,
                   int width, int height, int bgra)
 {
@@ -28,7 +25,7 @@ void nv_copy_rows(uint8_t* dst, const uint8_t* src, long src_pitch,
                 d[0] = s[2]; d[1] = s[1]; d[2] = s[0]; d[3] = 255;
             }
         } else {
-            for (int x = 0; x < width * 4; x++) d[x] = s[x];
+            memcpy(d, s, (size_t)width * 4);
         }
     }
 }
@@ -54,6 +51,7 @@ void nv_nv12_to_rgba(uint8_t* dst, const uint8_t* yp, long y_pitch,
         const uint8_t* yr = yp + (long)j * y_pitch;
         const uint8_t* uvr = uvp + (long)(j / 2) * uv_pitch;
         uint8_t* d = dst + (long)j * width * 4;
+       
         for (int i = 0; i < width; i++, d += 4) {
             int c = (yr[i] - y_off) * ky;
             int u = uvr[(i & ~1)] - 128;

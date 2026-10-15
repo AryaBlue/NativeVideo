@@ -7,6 +7,7 @@
  * pipeline runs in GStreamer's own threads and decodes a few frames ahead;
  * nv_read_frame just pulls the next ready frame from appsink.
  */
+ 
 #include "nativevideo.h"
 #include "nv_internal.h"
 
@@ -53,8 +54,9 @@ nv_video* nv_open(const char* path)
     GstElement* pipeline = gst_parse_launch(
         "filesrc name=src ! decodebin ! videoconvert ! "
         "video/x-raw,format=RGBA ! "
-        "appsink name=sink sync=false max-buffers=4 drop=false",
+        "appsink name=sink sync=false max-buffers=2 drop=false",
         &err);
+
     if (!pipeline) {
         nv_set_error("pipeline: %s", err ? err->message : "?");
         if (err) g_error_free(err);
@@ -71,6 +73,7 @@ nv_video* nv_open(const char* path)
     /* PAUSED = preroll: opens the file, finds a decoder, decodes frame 0. */
     gst_element_set_state(pipeline, GST_STATE_PAUSED);
     GstStateChangeReturn r = gst_element_get_state(pipeline, NULL, NULL, 10 * GST_SECOND);
+    
     if (r == GST_STATE_CHANGE_FAILURE) {
         if (!take_bus_error(pipeline)) nv_set_error("could not open %s", path);
         gst_element_set_state(pipeline, GST_STATE_NULL);
@@ -83,6 +86,7 @@ nv_video* nv_open(const char* path)
     GstCaps* caps = gst_pad_get_current_caps(pad);
     gst_object_unref(pad);
     GstVideoInfo vi;
+
     if (!caps || !gst_video_info_from_caps(&vi, caps)) {
         if (caps) gst_caps_unref(caps);
         nv_set_error("no video stream in %s", path);
@@ -140,11 +144,9 @@ int nv_read_frame(nv_video* v, uint8_t* rgba_out, double* pts_out)
                  GST_VIDEO_FRAME_PLANE_STRIDE(&frame, 0), w, h, 0);
 
     if (pts_out) {
-        /* Buffer PTS is in "segment" time. MP4s with B-frames carry an edit
-         * list, so the segment does not start at 0; stream time is the
-         * position in the file the user expects (frame 0 = 0.0s). */
         GstClockTime pts = GST_BUFFER_PTS(buf);
         const GstSegment* seg = gst_sample_get_segment(sample);
+      
         if (GST_CLOCK_TIME_IS_VALID(pts) && seg) {
             guint64 st = gst_segment_to_stream_time(seg, GST_FORMAT_TIME, pts);
             if (GST_CLOCK_TIME_IS_VALID(st)) pts = st;
@@ -161,7 +163,7 @@ int nv_seek(nv_video* v, double seconds)
     if (!v) return 0;
     if (seconds < 0) seconds = 0;
     /* ACCURATE: GStreamer decodes from the previous keyframe and drops
-     * frames before the target itself. FLUSH also clears a previous EOS. */
+     * frames before the target itself.z  */
     gboolean ok = gst_element_seek_simple(v->pipeline, GST_FORMAT_TIME,
         (GstSeekFlags)(GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_ACCURATE),
         (gint64)(seconds * GST_SECOND));
