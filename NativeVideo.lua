@@ -17,6 +17,7 @@ NativeVideo.__index = NativeVideo
 
 local SEEK_THRESHOLD = 1.0
 local lib
+local lf = love.filesystem
 
 local function load_library()
     if lib then return lib end
@@ -27,10 +28,10 @@ local function load_library()
 
     --for packing
     local candidates = {}
-    if not love.filesystem.isFused() then
-        table.insert(candidates, love.filesystem.getSource() .. "/" .. file)
+    if not lf.isFused() then
+        table.insert(candidates, lf.getSource() .. "/" .. file)
     end
-    table.insert(candidates, love.filesystem.getSourceBaseDirectory() .. "/" .. file)
+    table.insert(candidates, lf.getSourceBaseDirectory() .. "/" .. file)
     table.insert(candidates, "nativevideo")
 
     local errors = {}
@@ -56,21 +57,21 @@ end
 local function resolve_path(path)
     if is_absolute(path) and file_exists(path) then return path end
 
-    if love.filesystem.getInfo(path, "file") then
-        local dir = love.filesystem.getRealDirectory(path)
+    if lf.getInfo(path, "file") then
+        local dir = lf.getRealDirectory(path)
         if dir then
             local real = dir .. "/" .. path
             if file_exists(real) then return real end
         end
 
         local cache = "nativevideo_cache/" .. path:gsub("[/\\]", "_")
-        if not love.filesystem.getInfo(cache, "file") then
-            love.filesystem.createDirectory("nativevideo_cache")
-            local data = assert(love.filesystem.read("data", path))
-            assert(love.filesystem.write(cache, data))
+        if not lf.getInfo(cache, "file") then
+            lf.createDirectory("nativevideo_cache")
+            local data = assert(lf.read("data", path))
+            assert(lf.write(cache, data))
             data:release()
         end
-        return love.filesystem.getSaveDirectory() .. "/" .. cache
+        return lf.getSaveDirectory() .. "/" .. cache
     end
 
     error("NativeVideo: file not found: " .. tostring(path), 3)
