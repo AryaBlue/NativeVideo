@@ -1,22 +1,12 @@
 # NativeVideo for LOVE
 
-Play MP4 (and whatever else the OS can decode) in LOVE 11.x or LOVE 12.0 using the operating system's own video decoders. No FFmpeg to bundle, no codec licences.
+Play MP4 in LOVE 11.5 or later, using the operating system's own video decoders..
 
 | OS | API | Typical formats |
 |---|---|---|
 | Windows | Media Foundation | MP4/MOV (H.264), WebM (VP9); HEVC/AV1 with the free Store extensions |
 | macOS | AVFoundation | MP4/MOV (H.264, HEVC, ProRes) |
 | Linux | GStreamer | Whatever plugins are installed (`gstreamer1.0-libav` covers almost everything) |
-
-## Files
-
-- `NativeVideo.lua` - The player (copy into your game).
-- `nativevideo.dll` - Prebuilt Windows x64 library.
-- `libnativevideo.so` - Prebuilt Linux x64 library (needs GStreamer 1.x installed).
-- `main.lua`, `conf.lua` - Demo: drag a video onto the window.
-- `src/` - C sources: one shared API, one file per OS.
-- `test/` - Automated tests and test videos.
-- `CMakeLists.txt` - Builds the library for the current OS.
 
 ## Use it
 
@@ -27,7 +17,7 @@ local NativeVideo = require("NativeVideo")
 local video
 
 function love.load()
-    video = NativeVideo.new("videos/intro.mp4") -- LOVE path or absolute path
+    video = NativeVideo.new("videos.intro.mp4")
     video:setLoop(true)
     video:play()
 end
@@ -41,7 +31,7 @@ function love.draw()
 end
 ```
 
-### Syncing to music (rhythm games)
+### Syncing to audio
 
 Don't call `update(dt)`. Drive the video from the audio clock instead:
 
@@ -73,9 +63,8 @@ Small forward steps decode normally. Going backwards or jumping more than 1 seco
 
 - `src/nativevideo.h` is the whole C API: `nv_open`, `nv_read_frame`, `nv_seek`, and `nv_close`. Every backend outputs plain RGBA, so Lua doesn't care which OS it's on.
 - The decoder writes straight into an `ImageData`'s memory (`getFFIPointer`). There is no copy through Lua strings.
-- Two frames are held: the one on screen and the next one waiting for its timestamp. If a frame takes too long (lag spike), the player decodes forward but uploads only the newest frame to the GPU, so it catches up instead of drifting.
+- Keeps one frame ahead. After a lag spike it skips to the newest frame instead of drifting.
 - Timestamps are normalised so the first frame is always 0.0s. MP4s with B-frames otherwise start at approximately 0.067s on Windows.
-- Seek lands on the exact frame on every backend. If the OS seek overshoots, it retries a little earlier.
 
 ## Building
 
@@ -124,11 +113,8 @@ Run this command from the project folder.
 
   Play it with `love.audio`, and use `video:setTime(source:tell())` to keep the picture in sync.
 
-- **Decoding happens on the main thread** during `update`/`setTime`. GStreamer already decodes ahead in its own threads. On Windows/macOS, a 1080p frame takes a few milliseconds. For 4K, move decoding into a `love.thread`.
-- **Windows hardware decode:** Media Foundation is allowed to use hardware decoders, but full GPU decoding needs a Direct3D device manager, which this version doesn't set up.
-- **Alpha:** No OS decoder handles transparent video well. For alpha, use the `.gv` player.
-- **Video rotation metadata:** Phone video rotation is ignored.
-
 ## Credits
 
 Thanks to **ffunatsu** and their `love2d_gv_video_player`. 
+Microsoft documentation.
+GhostOne teaching me 
