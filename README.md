@@ -115,7 +115,7 @@ Run this command from the project folder.
 
 ## Credits
 
-- Thanks to **ffunatsu** and their `love2d_gv_video_player`.
+- Thanks to **ffunatsu** and their `love2d_gv_video_player` & MikuAuahDark NAV love fork
 - GhostOne teaching me
 - Reeko teaching me cpp 
 - Microsoft documentation.
