@@ -81,7 +81,7 @@ static bool read_format(nv_video* v)
         && range == MFNominalRange_0_255;
 
     // Only set the public size once; later format changes are clamped to it
-    // so the caller's buffer stays valid.
+
     if (v->info.width == 0) { v->info.width = vis_w; v->info.height = vis_h; }
 
     cur->Release();
@@ -123,7 +123,6 @@ extern "C" nv_video* nv_open(const char* path)
 {
     nv_video* v = (nv_video*)calloc(1, sizeof *v);
 
-    // LÖVE/SDL may already have COM set up on this thread in another mode;
     // RPC_E_CHANGED_MODE is fine, we just must not uninitialize it later.
     HRESULT hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
     v->com_owned = SUCCEEDED(hr);
@@ -144,7 +143,7 @@ extern "C" nv_video* nv_open(const char* path)
     for (int m = 0; m < MODE_COUNT && !v->reader; m++) {
         v->reader = create_reader(wpath, (Mode)m, &hr);
         v->nv12 = (m == MODE_NV12);
-        // A missing file fails the same way in every mode; don't retry.
+
         if (hr == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) ||
             hr == HRESULT_FROM_WIN32(ERROR_PATH_NOT_FOUND)) break;
     }
@@ -156,7 +155,7 @@ extern "C" nv_video* nv_open(const char* path)
             nv_set_error("file not found: %s", path);
         else
             nv_set_error("could not open video (0x%08lx). Unsupported codec? "
-                         "HEVC/AV1 need the Microsoft Store extensions.", (unsigned long)hr);
+                         "HEVC/AV1 need the Microsoft Store extensions.", (unsigned long)hr); //MS wants 80p 
         safe_release(v->reader);
         MFShutdown();
         if (v->com_owned) CoUninitialize();
@@ -226,6 +225,7 @@ extern "C" int nv_read_frame(nv_video* v, uint8_t* rgba_out, double* pts_out)
         LONGLONG ts = 0;
         IMFSample* sample = NULL;
         HRESULT hr = v->reader->ReadSample(kStream, 0, NULL, &flags, &ts, &sample);
+
         if (FAILED(hr)) {
             nv_set_error("ReadSample failed (0x%08lx)", (unsigned long)hr);
             return -1;
@@ -236,11 +236,14 @@ extern "C" int nv_read_frame(nv_video* v, uint8_t* rgba_out, double* pts_out)
 
         IMFMediaBuffer* buf = NULL;
         int ok = 0;
+
         if (SUCCEEDED(sample->ConvertToContiguousBuffer(&buf))) {
             ok = copy_buffer(v, buf, rgba_out);
             buf->Release();
         }
+
         sample->Release();
+
         if (!ok) { nv_set_error("could not read frame buffer"); return -1; }
         if (pts_out) *pts_out = (double)ts / 1e7;
         return 1;
@@ -255,6 +258,7 @@ extern "C" int nv_seek(nv_video* v, double seconds)
     PropVariantInit(&var);
     var.vt = VT_I8;
     var.hVal.QuadPart = (LONGLONG)(seconds * 1e7);
+
     // Lands on the keyframe at or before the target; Lua skips the rest.
     HRESULT hr = v->reader->SetCurrentPosition(GUID_NULL, var);
     if (FAILED(hr)) { nv_set_error("seek failed (0x%08lx)", (unsigned long)hr); return 0; }
