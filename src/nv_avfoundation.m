@@ -1,9 +1,8 @@
 // macOS backend: AVFoundation (AVAssetReader).
-//
+
 // AVAssetReader uses VideoToolbox, so H.264/HEVC/ProRes decode on the GPU's
 // media engine where available. We ask for BGRA frames and swizzle to RGBA.
-// Built with ARC; Objective-C objects are kept in the C struct as retained
-// CF pointers.
+
 #import <AVFoundation/AVFoundation.h>
 #import <CoreVideo/CoreVideo.h>
 #include <stdlib.h>
@@ -68,11 +67,13 @@ nv_video* nv_open(const char* path)
     @autoreleasepool {
         NSURL* url = [NSURL fileURLWithPath:[NSString stringWithUTF8String:path]];
         AVURLAsset* asset = [AVURLAsset URLAssetWithURL:url
-            options:@{ AVURLAssetPreferPreciseDurationAndTimingKey : @YES }];
+        options:@{ AVURLAssetPreferPreciseDurationAndTimingKey : @YES }];
+            
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
         NSArray* tracks = [asset tracksWithMediaType:AVMediaTypeVideo];
 #pragma clang diagnostic pop
+
         if (tracks.count == 0) {
             nv_set_error("no video track (or unreadable file): %s", path);
             return NULL;
