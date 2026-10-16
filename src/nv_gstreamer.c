@@ -1,13 +1,3 @@
-/* Linux backend: GStreamer.
- *
- * Pipeline:  filesrc ! decodebin ! videoconvert ! video/x-raw,format=RGBA ! appsink
- *
- * decodebin picks whatever decoder the system has installed (hardware VA-API
- * decoders when present, otherwise e.g. avdec_h264 from gst-libav). The
- * pipeline runs in GStreamer's own threads and decodes a few frames ahead;
- * nv_read_frame just pulls the next ready frame from appsink.
- */
- 
 #include "nativevideo.h"
 #include "nv_internal.h"
 
@@ -24,7 +14,14 @@ struct nv_video {
 
 const char* nv_backend(void) { return "gstreamer"; }
 
-/* Pull an error message off the bus, if any, into nv_last_error. */
+static void* fail_open(GstElement* pipeline, GstElement* sink)
+{
+    gst_element_set_state(pipeline, GST_STATE_NULL);
+    if (sink) gst_object_unref(sink);
+    gst_object_unref(pipeline);
+    return NULL;
+}
+
 static int take_bus_error(GstElement* pipeline)
 {
     GstBus* bus = gst_element_get_bus(pipeline);
@@ -54,7 +51,7 @@ nv_video* nv_open(const char* path)
     GstElement* pipeline = gst_parse_launch(
         "filesrc name=src ! decodebin ! videoconvert ! "
         "video/x-raw,format=RGBA ! "
-        "appsink name=sink sync=false max-buffers=2 drop=false",
+        "appsink name=sink sync=false max-buffers=2 drop=false", 
         &err);
 
     if (!pipeline) {
@@ -76,10 +73,7 @@ nv_video* nv_open(const char* path)
     
     if (r == GST_STATE_CHANGE_FAILURE) {
         if (!take_bus_error(pipeline)) nv_set_error("could not open %s", path);
-        gst_element_set_state(pipeline, GST_STATE_NULL);
-        gst_object_unref(sink);
-        gst_object_unref(pipeline);
-        return NULL;
+        return fail_open(pipeline, sink);
     }
 
     GstPad* pad = gst_element_get_static_pad(sink, "sink");
@@ -90,11 +84,9 @@ nv_video* nv_open(const char* path)
     if (!caps || !gst_video_info_from_caps(&vi, caps)) {
         if (caps) gst_caps_unref(caps);
         nv_set_error("no video stream in %s", path);
-        gst_element_set_state(pipeline, GST_STATE_NULL);
-        gst_object_unref(sink);
-        gst_object_unref(pipeline);
-        return NULL;
+        return fail_open(pipeline, sink);
     }
+
     gst_caps_unref(caps);
 
     nv_video* v = (nv_video*)calloc(1, sizeof *v);
@@ -119,6 +111,7 @@ int nv_read_frame(nv_video* v, uint8_t* rgba_out, double* pts_out)
 {
     if (!v) return -1;
     GstSample* sample = gst_app_sink_pull_sample(v->sink);
+   
     if (!sample) {
         if (gst_app_sink_is_eos(v->sink)) return 0;
         if (!take_bus_error(v->pipeline)) nv_set_error("pull_sample failed");
@@ -128,6 +121,7 @@ int nv_read_frame(nv_video* v, uint8_t* rgba_out, double* pts_out)
     GstBuffer* buf = gst_sample_get_buffer(sample);
     GstVideoInfo vi;
     GstVideoFrame frame;
+
     if (!gst_video_info_from_caps(&vi, gst_sample_get_caps(sample)) ||
         !gst_video_frame_map(&frame, &vi, buf, GST_MAP_READ)) {
         gst_sample_unref(sample);
@@ -139,6 +133,7 @@ int nv_read_frame(nv_video* v, uint8_t* rgba_out, double* pts_out)
     int h = GST_VIDEO_FRAME_HEIGHT(&frame);
     if (w > v->info.width)  w = v->info.width;
     if (h > v->info.height) h = v->info.height;
+
     nv_copy_rows(rgba_out,
                  (const uint8_t*)GST_VIDEO_FRAME_PLANE_DATA(&frame, 0),
                  GST_VIDEO_FRAME_PLANE_STRIDE(&frame, 0), w, h, 0);
@@ -167,6 +162,7 @@ int nv_seek(nv_video* v, double seconds)
     gboolean ok = gst_element_seek_simple(v->pipeline, GST_FORMAT_TIME,
         (GstSeekFlags)(GST_SEEK_FLAG_FLUSH | GST_SEEK_FLAG_ACCURATE),
         (gint64)(seconds * GST_SECOND));
+  
     if (!ok) { nv_set_error("seek failed"); return 0; }
     return 1;
 }

@@ -2,6 +2,7 @@
 #include "nv_internal.h"
 #include <stdarg.h>
 #include <stdio.h>
+#include <string.h>
 
 static char g_error[512] = "";
 

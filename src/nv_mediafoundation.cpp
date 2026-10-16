@@ -15,6 +15,7 @@
 #include "nv_internal.h"
 
 static const DWORD kStream = (DWORD)MF_SOURCE_READER_FIRST_VIDEO_STREAM;
+static const double kTicksPerSecond = 1e7; 
 
 enum Mode { MODE_RGB32_ADVANCED, MODE_RGB32_BASIC, MODE_NV12, MODE_COUNT };
 
@@ -22,7 +23,7 @@ struct nv_video {
     IMFSourceReader* reader;
     nv_info info;
     bool   nv12;
-    // Decoded buffers can be larger than the picture (e.g. 1920x1088) and the
+    // Decoded buffers can be larger than the picture and the
     // visible area may be offset. These describe where the picture is.
     UINT32 buf_w, buf_h;
     LONG   default_stride;
@@ -34,6 +35,12 @@ struct nv_video {
 extern "C" const char* nv_backend(void) { return "mediafoundation"; }
 
 template <class T> static void safe_release(T*& p) { if (p) { p->Release(); p = NULL; } }
+
+static bool is_not_found(HRESULT hr)
+{
+    return hr == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) ||
+           hr == HRESULT_FROM_WIN32(ERROR_PATH_NOT_FOUND);
+}
 
 // Read frame size, visible area, stride and colour info from the output type.
 static bool read_format(nv_video* v)
@@ -90,6 +97,7 @@ static IMFSourceReader* create_reader(const wchar_t* wpath, Mode mode, HRESULT* 
     IMFSourceReader* reader = NULL;
     IMFMediaType* type = NULL;
     HRESULT hr = MFCreateAttributes(&attrs, 3);
+   
     if (SUCCEEDED(hr)) {
         if (mode == MODE_RGB32_ADVANCED)
             attrs->SetUINT32(MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING, TRUE);
@@ -98,18 +106,22 @@ static IMFSourceReader* create_reader(const wchar_t* wpath, Mode mode, HRESULT* 
         attrs->SetUINT32(MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, TRUE);
         hr = MFCreateSourceReaderFromURL(wpath, attrs, &reader);
     }
+  
     if (SUCCEEDED(hr)) {
         reader->SetStreamSelection((DWORD)MF_SOURCE_READER_ALL_STREAMS, FALSE);
         hr = reader->SetStreamSelection(kStream, TRUE);
     }
+   
     if (SUCCEEDED(hr)) hr = MFCreateMediaType(&type);
     if (SUCCEEDED(hr)) {
         type->SetGUID(MF_MT_MAJOR_TYPE, MFMediaType_Video);
         type->SetGUID(MF_MT_SUBTYPE, mode == MODE_NV12 ? MFVideoFormat_NV12 : MFVideoFormat_RGB32);
         hr = reader->SetCurrentMediaType(kStream, NULL, type);
     }
+
     safe_release(type);
     safe_release(attrs);
+   
     if (FAILED(hr)) safe_release(reader);
     *out_hr = hr;
     return reader;
@@ -119,7 +131,6 @@ extern "C" nv_video* nv_open(const char* path)
 {
     nv_video* v = (nv_video*)calloc(1, sizeof *v);
 
-    // RPC_E_CHANGED_MODE is fine, we just must not uninitialize it later.
     HRESULT hr = CoInitializeEx(NULL, COINIT_MULTITHREADED);
     v->com_owned = SUCCEEDED(hr);
 
@@ -139,19 +150,16 @@ extern "C" nv_video* nv_open(const char* path)
     for (int m = 0; m < MODE_COUNT && !v->reader; m++) {
         v->reader = create_reader(wpath, (Mode)m, &hr);
         v->nv12 = (m == MODE_NV12);
-
-        if (hr == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) ||
-            hr == HRESULT_FROM_WIN32(ERROR_PATH_NOT_FOUND)) break;
+        if (is_not_found(hr)) break;   // no point retrying
     }
     free(wpath);
 
     if (!v->reader || !read_format(v)) {
-        if (hr == HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND) ||
-            hr == HRESULT_FROM_WIN32(ERROR_PATH_NOT_FOUND))
+        if (is_not_found(hr))
             nv_set_error("file not found: %s", path);
         else
             nv_set_error("could not open video (0x%08lx). Unsupported codec? "
-                         "HEVC/AV1 need the Microsoft Store extensions.", (unsigned long)hr); //MS wants 80p 
+                         "HEVC/AV1 need the Microsoft Store extensions.", (unsigned long)hr);
         safe_release(v->reader);
         MFShutdown();
         if (v->com_owned) CoUninitialize();
@@ -163,7 +171,7 @@ extern "C" nv_video* nv_open(const char* path)
     PropVariantInit(&var);
     if (SUCCEEDED(v->reader->GetPresentationAttribute((DWORD)MF_SOURCE_READER_MEDIASOURCE,
                                                       MF_PD_DURATION, &var))) {
-        v->info.duration = (double)var.uhVal.QuadPart / 1e7;   // 100ns units
+        v->info.duration = (double)var.uhVal.QuadPart / kTicksPerSecond;
         PropVariantClear(&var);
     }
     return v;
